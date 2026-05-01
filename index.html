@@ -403,7 +403,7 @@ border-bottom: 1px solid var(–border);
 <!-- HEADER -->
 
 <header>
-  <div class="logo">IPTV<span>●</span>PLAY <span style="font-size:0.55rem;color:var(--muted);font-weight:400;letter-spacing:1px;vertical-align:middle;">v1.6</span></div>
+  <div class="logo">IPTV<span>●</span>PLAY <span style="font-size:0.55rem;color:var(--muted);font-weight:400;letter-spacing:1px;vertical-align:middle;">v1.7</span></div>
   <div class="controls">
     <button class="btn primary" onclick="openModal('import')">📂 Importar M3U</button>
     <button class="btn" onclick="openModal('addChannel')">➕ Canal Manual</button>
@@ -669,19 +669,29 @@ async function importM3U() {
         const target = fn(urlVal);
         const text = await fetchSimple(target);
         if (!text || (!text.includes('#EXTM3U') && !text.includes('#EXTINF'))) {
-          logImport(`  ✗ Resposta invalida (nao e M3U)`, 'var(--accent2)');
+          logImport(`  ✗ Resposta invalida (nao e M3U)`);
           continue;
         }
-        logImport(`  ✓ Download OK — ${formatBytes(text.length)}`, 'var(--live)');
+        logImport(`  ✓ Download OK — ${formatBytes(text.length)}`);
         setBar(90);
         parsed = parseM3U(text);
-        logImport(`  ✓ ${parsed.length} canais encontrados`, 'var(--live)');
+        logImport(`  ✓ ${parsed.length} canais encontrados`);
         setBar(100);
         setBytes(formatBytes(text.length) + ' recebidos');
         success = true;
         break;
       } catch(e) {
-        logImport(`  ✗ Falhou: ${e.message}`, 'var(--accent2)');
+        const msg = e.message || String(e);
+        let detalhe = msg;
+        if (msg.includes('520'))       detalhe = 'HTTP 520 — servidor da lista fora do ar';
+        else if (msg.includes('521'))  detalhe = 'HTTP 521 — servidor offline';
+        else if (msg.includes('522'))  detalhe = 'HTTP 522 — timeout de conexao';
+        else if (msg.includes('524'))  detalhe = 'HTTP 524 — servidor demorou demais';
+        else if (msg.includes('404'))  detalhe = 'HTTP 404 — lista nao encontrada';
+        else if (msg.includes('403'))  detalhe = 'HTTP 403 — acesso negado';
+        else if (msg.includes('Load failed'))  detalhe = 'Load failed — bloqueado pelo browser (CORS/HTTPS)';
+        else if (msg.includes('aborted'))      detalhe = 'Timeout — sem resposta em 15s';
+        logImport(`  ✗ ${detalhe}`);
       }
     }
 
@@ -689,7 +699,11 @@ async function importM3U() {
     btn.textContent = 'Importar';
 
     if (!success) {
-      logImport('Todos os metodos falharam. Cole o conteudo M3U manualmente.', 'var(--accent2)');
+      logImport('');
+      logImport('TODOS OS METODOS FALHARAM.');
+      logImport('Causa provavel: servidor da lista fora do ar.');
+      logImport('Tente acessar a URL direto no browser.');
+      logImport('Se abrir, copie o conteudo e cole no campo abaixo.');
       setBar(0);
       return;
     }
