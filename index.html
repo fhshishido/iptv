@@ -590,23 +590,30 @@ async function importM3U() {
   let parsed = [];
 
   if (urlVal) {
-    try {
-      toast('Baixando lista...', 'var(--accent)');
-      // Try direct fetch (may fail due to CORS)
-      const resp = await fetch(urlVal);
-      const text = await resp.text();
-      parsed = parseM3U(text);
-    } catch(e) {
-      // Try CORS proxy
+    const proxies = [
+      u => u,
+      u => `https://corsproxy.io/?${encodeURIComponent(u)}`,
+      u => `https://api.allorigins.win/raw?url=${encodeURIComponent(u)}`,
+      u => `https://proxy.cors.sh/${u}`,
+    ];
+    let success = false;
+    for (const proxyFn of proxies) {
       try {
-        const proxy = 'https://corsproxy.io/?' + encodeURIComponent(urlVal);
-        const resp = await fetch(proxy);
+        const target = proxyFn(urlVal);
+        const label = target === urlVal ? 'direto' : 'proxy';
+        toast(`⏳ Tentando ${label}...`, 'var(--accent)');
+        const resp = await fetch(target, { signal: AbortSignal.timeout(8000) });
+        if (!resp.ok) continue;
         const text = await resp.text();
+        if (!text.includes('#EXTM3U') && !text.includes('#EXTINF')) continue;
         parsed = parseM3U(text);
-      } catch(e2) {
-        toast('Erro ao baixar. Cole o conteúdo manualmente.', 'var(--accent2)');
-        return;
-      }
+        success = true;
+        break;
+      } catch(e) { continue; }
+    }
+    if (!success) {
+      toast('Nao foi possivel baixar. Cole o conteudo M3U manualmente.', 'var(--accent2)');
+      return;
     }
   } else if (textVal) {
     parsed = parseM3U(textVal);
