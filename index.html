@@ -403,7 +403,7 @@ border-bottom: 1px solid var(–border);
 <!-- HEADER -->
 
 <header>
-  <div class="logo">IPTV<span>●</span>PLAY <span style="font-size:0.55rem;color:var(--muted);font-weight:400;letter-spacing:1px;vertical-align:middle;">v2.1</span></div>
+  <div class="logo">IPTV<span>●</span>PLAY <span style="font-size:0.55rem;color:var(--muted);font-weight:400;letter-spacing:1px;vertical-align:middle;">v2.2</span></div>
   <div class="controls">
     <button class="btn primary" onclick="openModal('import')">📂 Importar M3U</button>
     <button class="btn" onclick="openModal('addChannel')">➕ Canal Manual</button>
@@ -765,6 +765,7 @@ async function importM3U() {
   await new Promise(r => setTimeout(r, 0));
 
   channels = [...channels, ...parsed];
+  rebuildIndexMap();
   logImport(`Total: ${channels.length.toLocaleString()} canais na memoria`);
 
   save();
@@ -916,6 +917,15 @@ function buildChannelItem(ch, realIdx) {
   </div>`;
 }
 
+// Index map: id -> index in channels array (rebuilt after import)
+let channelIndexMap = {};
+function rebuildIndexMap() {
+  channelIndexMap = {};
+  for (let i = 0; i < channels.length; i++) {
+    channelIndexMap[channels[i].id] = i;
+  }
+}
+
 function renderChannels() {
   const list = document.getElementById('channelList');
   const filtered = getFilteredChannels();
@@ -929,12 +939,12 @@ function renderChannels() {
   const slice = filtered.slice(0, currentPage * PAGE_SIZE);
   const hasMore = slice.length < total;
 
-  // Build using fragment for performance
   const frag = document.createDocumentFragment();
-
-  // Use a temp container
   const tmp = document.createElement('div');
-  tmp.innerHTML = slice.map(ch => buildChannelItem(ch, channels.indexOf(ch))).join('');
+  tmp.innerHTML = slice.map(ch => {
+    const realIdx = channelIndexMap[ch.id] ?? -1;
+    return buildChannelItem(ch, realIdx);
+  }).join('');
   while (tmp.firstChild) frag.appendChild(tmp.firstChild);
 
   // "Load more" button
@@ -1132,6 +1142,7 @@ document.getElementById('m3uUrl').addEventListener('input', function() {
   localStorage.setItem('iptv_last_url', this.value.trim());
 });
 
+rebuildIndexMap();
 renderCategories();
 renderChannels();
 </script>
