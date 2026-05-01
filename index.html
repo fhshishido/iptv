@@ -403,7 +403,7 @@ border-bottom: 1px solid var(–border);
 <!-- HEADER -->
 
 <header>
-  <div class="logo">IPTV<span>●</span>PLAY <span style="font-size:0.55rem;color:var(--muted);font-weight:400;letter-spacing:1px;vertical-align:middle;">v1.5</span></div>
+  <div class="logo">IPTV<span>●</span>PLAY <span style="font-size:0.55rem;color:var(--muted);font-weight:400;letter-spacing:1px;vertical-align:middle;">v1.6</span></div>
   <div class="controls">
     <button class="btn primary" onclick="openModal('import')">📂 Importar M3U</button>
     <button class="btn" onclick="openModal('addChannel')">➕ Canal Manual</button>
@@ -486,13 +486,17 @@ border-bottom: 1px solid var(–border);
       <button class="btn" onclick="closeModal('import')">Cancelar</button>
       <button class="btn primary" id="btnImport" onclick="importM3U()">Importar</button>
     </div>
-    <!-- PROGRESS PANEL -->
-    <div id="importProgress" style="display:none;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius);padding:12px 14px;font-family:'Space Mono',monospace;font-size:0.7rem;line-height:1.8;">
-      <div id="importLog" style="color:var(--muted);max-height:120px;overflow-y:auto;"></div>
-      <div style="margin-top:8px;background:var(--surface2);border-radius:4px;height:6px;overflow:hidden;">
-        <div id="importBar" style="height:100%;width:0%;background:var(--accent);transition:width .3s;border-radius:4px;"></div>
+    <!-- LOG SEMPRE VISÍVEL -->
+    <div>
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px;">
+        <label style="margin:0;">Log</label>
+        <button class="btn" style="padding:2px 10px;font-size:0.62rem;" onclick="document.getElementById('importLog').value=''">Limpar</button>
       </div>
-      <div id="importBytes" style="margin-top:4px;color:var(--muted);font-size:0.65rem;"></div>
+      <textarea id="importLog" readonly placeholder="Aguardando..." style="height:100px;color:var(--live);background:var(--bg);font-size:0.68rem;resize:vertical;cursor:text;"></textarea>
+      <div style="margin-top:6px;background:var(--surface2);border-radius:4px;height:5px;overflow:hidden;">
+        <div id="importBar" style="height:100%;width:0%;background:var(--accent);transition:width .4s;border-radius:4px;"></div>
+      </div>
+      <div id="importBytes" style="margin-top:4px;color:var(--muted);font-family:'Space Mono',monospace;font-size:0.62rem;"></div>
     </div>
   </div>
 </div>
@@ -592,13 +596,10 @@ function parseM3U(text) {
 // ═══════════════════════════════════════
 //  IMPORT with progress
 // ═══════════════════════════════════════
-function logImport(msg, color='var(--muted)') {
+function logImport(msg, color) {
   const el = document.getElementById('importLog');
   if (!el) return;
-  const line = document.createElement('div');
-  line.style.color = color;
-  line.textContent = msg;
-  el.appendChild(line);
+  el.value += (el.value ? '\n' : '') + msg;
   el.scrollTop = el.scrollHeight;
 }
 
@@ -613,10 +614,7 @@ function setBytes(txt) {
 }
 
 function showProgress(show) {
-  const p = document.getElementById('importProgress');
-  if (p) p.style.display = show ? 'block' : 'none';
-  if (show) {
-    document.getElementById('importLog').innerHTML = '';
+  if (!show) {
     setBar(0);
     setBytes('');
   }
@@ -650,6 +648,7 @@ async function importM3U() {
 
   if (urlVal) {
     showProgress(true);
+    document.getElementById('importLog').value = '';
     const btn = document.getElementById('btnImport');
     btn.disabled = true;
     btn.textContent = '⏳ Aguarde...';
@@ -696,7 +695,7 @@ async function importM3U() {
     }
 
   } else if (textVal) {
-    showProgress(true);
+    document.getElementById('importLog').value = '';
     logImport('Processando conteudo colado...');
     parsed = parseM3U(textVal);
     logImport(`✓ ${parsed.length} canais encontrados`, 'var(--live)');
