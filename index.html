@@ -403,7 +403,7 @@ border-bottom: 1px solid var(–border);
 <!-- HEADER -->
 
 <header>
-  <div class="logo">IPTV<span>●</span>PLAY <span style="font-size:0.55rem;color:var(--muted);font-weight:400;letter-spacing:1px;vertical-align:middle;">v2.5</span></div>
+  <div class="logo">IPTV<span>●</span>PLAY <span style="font-size:0.55rem;color:var(--muted);font-weight:400;letter-spacing:1px;vertical-align:middle;">v2.6</span></div>
   <div class="controls">
     <button class="btn primary" onclick="openModal('import')">📂 Importar M3U</button>
     <button class="btn" onclick="openModal('addChannel')">➕ Canal Manual</button>
@@ -660,6 +660,7 @@ async function fetchSimple(url) {
 }
 
 async function importM3U() {
+  try {
   const fileInput = document.getElementById('m3uFile');
   const urlVal   = document.getElementById('m3uUrl').value.trim();
   const textVal  = document.getElementById('m3uText').value.trim();
@@ -800,6 +801,14 @@ async function importM3U() {
     closeModal('import');
     toast(`✅ ${parsed.length.toLocaleString()} canais importados!`);
   }, 1000);
+
+  } catch(err) {
+    const btn = document.getElementById('btnImport');
+    if (btn) { btn.disabled = false; btn.textContent = 'Importar'; }
+    const log = document.getElementById('importLog');
+    if (log) log.value += '\nERRO INESPERADO: ' + err.message + '\n' + err.stack;
+    console.error('importM3U error:', err);
+  }
 }
 
 // ═══════════════════════════════════════
