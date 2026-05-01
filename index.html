@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 
 <html lang="pt-BR">
@@ -403,7 +404,7 @@ border-bottom: 1px solid var(–border);
 <!-- HEADER -->
 
 <header>
-  <div class="logo">IPTV<span>●</span>PLAY <span style="font-size:0.55rem;color:var(--muted);font-weight:400;letter-spacing:1px;vertical-align:middle;">v1.8</span></div>
+  <div class="logo">IPTV<span>●</span>PLAY <span style="font-size:0.55rem;color:var(--muted);font-weight:400;letter-spacing:1px;vertical-align:middle;">v2.0</span></div>
   <div class="controls">
     <button class="btn primary" onclick="openModal('import')">📂 Importar M3U</button>
     <button class="btn" onclick="openModal('addChannel')">➕ Canal Manual</button>
@@ -424,7 +425,7 @@ border-bottom: 1px solid var(–border);
       <div class="tab" id="tab-fav" onclick="switchTab('fav')">⭐ FAVORITOS</div>
     </div>
     <div class="search-bar">
-      <input type="text" id="searchInput" placeholder="Buscar canal..." oninput="renderChannels()" />
+      <input type="text" id="searchInput" placeholder="Buscar canal..." oninput="currentPage=1;renderChannels()" />
     </div>
     <div class="category-bar" id="categoryBar"></div>
     <div class="channel-list" id="channelList">
@@ -568,25 +569,24 @@ function toast(msg, color='var(--accent)') {
 }
 
 // ═══════════════════════════════════════
-//  PARSE M3U
+//  PARSE M3U (async, em chunks para não travar)
 // ═══════════════════════════════════════
-function parseM3U(text) {
-  const lines = text.split('\n').map(l => l.trim()).filter(Boolean);
+async function parseM3U(text) {
+  const lines = text.split('\n');
   const list = [];
   let current = {};
-  for (const line of lines) {
+  const CHUNK = 5000;
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i].trim();
+    if (!line) continue;
     if (line.startsWith('#EXTINF')) {
       current = {};
-      // tvg-name
       const nameM = line.match(/tvg-name="([^"]*)"/);
       if (nameM) current.name = nameM[1];
-      // tvg-logo
       const logoM = line.match(/tvg-logo="([^"]*)"/);
       if (logoM) current.logo = logoM[1];
-      // group-title
       const groupM = line.match(/group-title="([^"]*)"/);
       current.group = groupM ? groupM[1] : 'Sem Grupo';
-      // fallback name (after last comma)
       const commaIdx = line.lastIndexOf(',');
       if (commaIdx >= 0 && !current.name) current.name = line.slice(commaIdx+1).trim();
     } else if (!line.startsWith('#') && line.length > 4) {
@@ -595,6 +595,11 @@ function parseM3U(text) {
         list.push({ ...current, id: Math.random().toString(36).slice(2) });
       }
       current = {};
+    }
+    // Yield a cada CHUNK linhas para não travar a UI
+    if (i % CHUNK === 0 && i > 0) {
+      logImport(`  processando... ${list.length} canais`);
+      await new Promise(r => setTimeout(r, 0));
     }
   }
   return list;
@@ -757,17 +762,37 @@ async function importM3U() {
     return;
   }
 
+  logImport(`Adicionando ${parsed.length.toLocaleString()} canais...`);
+  await new Promise(r => setTimeout(r, 0));
+
   channels = [...channels, ...parsed];
+  logImport(`Total: ${channels.length.toLocaleString()} canais na memoria`);
+
   save();
-  renderChannels();
+  logImport('Salvando favoritos...');
+
+  currentPage = 1;
+  currentCategory = 'Todos';
+
+  logImport('Renderizando categorias...');
+  await new Promise(r => setTimeout(r, 0));
   renderCategories();
+
+  logImport('Renderizando lista...');
+  await new Promise(r => setTimeout(r, 0));
+  renderChannels();
+
   document.getElementById('m3uUrl').value = '';
   document.getElementById('m3uText').value = '';
   document.getElementById('m3uFile').value = '';
+
+  logImport(`✓ Pronto! ${parsed.length.toLocaleString()} canais importados.`);
+  setBar(100);
+
   setTimeout(() => {
     closeModal('import');
-    toast(`✅ ${parsed.length} canais importados!`);
-  }, 800);
+    toast(`✅ ${parsed.length.toLocaleString()} canais importados!`);
+  }, 1000);
 }
 
 // ═══════════════════════════════════════
@@ -792,8 +817,20 @@ function addChannelManual() {
 //  SAVE
 // ═══════════════════════════════════════
 function save() {
-  localStorage.setItem('iptv_channels', JSON.stringify(channels));
-  localStorage.setItem('iptv_favs', JSON.stringify([...favorites]));
+  try {
+    localStorage.setItem('iptv_favs', JSON.stringify([...favorites]));
+  } catch(e) {}
+  // Listas grandes demais para localStorage — salva só os primeiros 5000
+  try {
+    const toSave = channels.length > 5000 ? channels.slice(0, 5000) : channels;
+    localStorage.setItem('iptv_channels', JSON.stringify(toSave));
+    if (channels.length > 5000) {
+      localStorage.setItem('iptv_channels_total', channels.length);
+    }
+  } catch(e) {
+    // Se ainda assim falhar, salva só favoritos
+    try { localStorage.removeItem('iptv_channels'); } catch(e2) {}
+  }
 }
 
 // ═══════════════════════════════════════
@@ -838,23 +875,25 @@ function renderCategories() {
 
 function selectCategory(cat) {
   currentCategory = cat;
+  currentPage = 1;
   renderCategories();
   renderChannels();
 }
 
 // ═══════════════════════════════════════
-//  RENDER CHANNELS
+//  RENDER CHANNELS (paginado)
 // ═══════════════════════════════════════
 function switchTab(tab) {
   currentTab = tab;
+  currentPage = 1;
   document.getElementById('tab-all').classList.toggle('active', tab==='all');
   document.getElementById('tab-fav').classList.toggle('active', tab==='fav');
   renderChannels();
 }
 
 function getFilteredChannels() {
-  const q = document.getElementById('searchInput').value.toLowerCase();
-  return channels.filter((ch, i) => {
+  const q = document.getElementById('searchInput').value.toLowerCase().trim();
+  return channels.filter(ch => {
     if (currentTab === 'fav' && !favorites.has(ch.id)) return false;
     if (currentCategory !== 'Todos' && ch.group !== currentCategory) return false;
     if (q && !ch.name.toLowerCase().includes(q) && !(ch.group||'').toLowerCase().includes(q)) return false;
@@ -862,29 +901,67 @@ function getFilteredChannels() {
   });
 }
 
+function buildChannelItem(ch, realIdx) {
+  const isFav = favorites.has(ch.id);
+  const isActive = realIdx === activeIndex;
+  const logo = ch.logo
+    ? `<img class="ch-logo" src="${ch.logo}" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'" /><div class="ch-logo-placeholder" style="display:none">📺</div>`
+    : `<div class="ch-logo-placeholder">📺</div>`;
+  return `<div class="channel-item${isActive?' active':''}" onclick="playChannel(${realIdx})">
+    ${logo}
+    <div class="ch-info">
+      <div class="ch-name">${ch.name}</div>
+      <div class="ch-group">${ch.group||'Sem Grupo'}</div>
+    </div>
+    <div class="ch-fav${isFav?' on':''}" onclick="toggleFav(event,'${ch.id}')" title="Favorito">★</div>
+  </div>`;
+}
+
 function renderChannels() {
   const list = document.getElementById('channelList');
   const filtered = getFilteredChannels();
-  if (!filtered.length) {
+  const total = filtered.length;
+
+  if (!total) {
     list.innerHTML = `<div class="empty-state"><span class="icon">🔍</span>Nenhum canal encontrado.</div>`;
     return;
   }
-  list.innerHTML = filtered.map((ch, fi) => {
-    const realIdx = channels.indexOf(ch);
-    const isFav = favorites.has(ch.id);
-    const isActive = realIdx === activeIndex;
-    const logo = ch.logo
-      ? `<img class="ch-logo" src="${ch.logo}" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'" /><div class="ch-logo-placeholder" style="display:none">📺</div>`
-      : `<div class="ch-logo-placeholder">📺</div>`;
-    return `<div class="channel-item${isActive?' active':''}" onclick="playChannel(${realIdx})">
-      ${logo}
-      <div class="ch-info">
-        <div class="ch-name">${ch.name}</div>
-        <div class="ch-group">${ch.group||'Sem Grupo'}</div>
-      </div>
-      <div class="ch-fav${isFav?' on':''}" onclick="toggleFav(event,'${ch.id}')" title="Favorito">★</div>
-    </div>`;
-  }).join('');
+
+  const slice = filtered.slice(0, currentPage * PAGE_SIZE);
+  const hasMore = slice.length < total;
+
+  // Build using fragment for performance
+  const frag = document.createDocumentFragment();
+
+  // Use a temp container
+  const tmp = document.createElement('div');
+  tmp.innerHTML = slice.map(ch => buildChannelItem(ch, channels.indexOf(ch))).join('');
+  while (tmp.firstChild) frag.appendChild(tmp.firstChild);
+
+  // "Load more" button
+  if (hasMore) {
+    const btn = document.createElement('div');
+    btn.style.cssText = 'padding:12px;text-align:center;';
+    btn.innerHTML = `<button class="btn" style="width:100%" onclick="loadMore()">
+      ▼ Carregar mais (${slice.length} de ${total.toLocaleString()})
+    </button>`;
+    frag.appendChild(btn);
+  } else {
+    const info = document.createElement('div');
+    info.style.cssText = 'padding:8px 12px;text-align:center;font-size:0.65rem;color:var(--muted);font-family:"Space Mono",monospace;';
+    info.textContent = `${total.toLocaleString()} canais`;
+    frag.appendChild(info);
+  }
+
+  list.innerHTML = '';
+  list.appendChild(frag);
+}
+
+function loadMore() {
+  currentPage++;
+  const scrollTop = document.getElementById('channelList').scrollTop;
+  renderChannels();
+  document.getElementById('channelList').scrollTop = scrollTop;
 }
 
 // ═══════════════════════════════════════
