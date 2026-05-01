@@ -5,7 +5,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>IPTV Player</title>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/hls.js/1.5.13/hls.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/hls.js@1"></script>
 <style>
   @import url('https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=Space+Mono:wght@400;700&display=swap');
 
@@ -403,7 +403,7 @@ border-bottom: 1px solid var(–border);
 <!-- HEADER -->
 
 <header>
-  <div class="logo">IPTV<span>●</span>PLAY <span style="font-size:0.55rem;color:var(--muted);font-weight:400;letter-spacing:1px;vertical-align:middle;">v2.3</span></div>
+  <div class="logo">IPTV<span>●</span>PLAY <span style="font-size:0.55rem;color:var(--muted);font-weight:400;letter-spacing:1px;vertical-align:middle;">v2.5</span></div>
   <div class="controls">
     <button class="btn primary" onclick="openModal('import')">📂 Importar M3U</button>
     <button class="btn" onclick="openModal('addChannel')">➕ Canal Manual</button>
@@ -448,6 +448,14 @@ border-bottom: 1px solid var(–border);
         <div class="live-dot"></div>
         <span id="badgeText"></span>
       </div>
+      <!-- ERRO OVERLAY -->
+      <div id="errorOverlay" style="display:none;position:absolute;inset:0;background:rgba(0,0,0,.85);flex-direction:column;align-items:center;justify-content:center;gap:12px;padding:20px;text-align:center;">
+        <div style="font-size:2rem;">🔴</div>
+        <div id="errorTitle" style="font-size:1rem;font-weight:700;color:#ff4f6d;">Falha ao reproduzir</div>
+        <div id="errorMsg" style="font-family:'Space Mono',monospace;font-size:0.72rem;color:#e8ecf2;line-height:1.6;word-break:break-all;max-width:400px;"></div>
+        <div id="errorUrl" style="font-family:'Space Mono',monospace;font-size:0.62rem;color:#556070;word-break:break-all;max-width:400px;"></div>
+        <button class="btn" onclick="document.getElementById('errorOverlay').style.display='none'">Fechar</button>
+      </div>
     </div>
     <div class="player-info">
       <div class="now-playing">
@@ -456,7 +464,6 @@ border-bottom: 1px solid var(–border);
         <div class="group" id="nowGroup">—</div>
       </div>
       <div class="player-controls">
-        <span id="streamStatus" style="font-family:'Space Mono',monospace;font-size:0.65rem;color:var(--muted);align-self:center;"></span>
         <button class="btn" onclick="prevChannel()">⏮ Anterior</button>
         <button class="btn" onclick="nextChannel()">Próximo ⏭</button>
         <button class="btn" onclick="toggleFullscreen()">⛶ Tela Cheia</button>
@@ -992,7 +999,17 @@ function isHlsUrl(url) {
   return /\.m3u8(\?|$)/i.test(url) || /\/hls\//i.test(url);
 }
 
-function destroyHls() {
+function showError(title, msg, url) {
+  const ov = document.getElementById('errorOverlay');
+  document.getElementById('errorTitle').textContent = title;
+  document.getElementById('errorMsg').textContent = msg;
+  document.getElementById('errorUrl').textContent = url || '';
+  ov.style.display = 'flex';
+}
+
+function hideError() {
+  document.getElementById('errorOverlay').style.display = 'none';
+}
   if (hlsInstance) { hlsInstance.destroy(); hlsInstance = null; }
 }
 
@@ -1008,6 +1025,7 @@ function playChannel(idx) {
   const statusEl = document.getElementById('streamStatus');
 
   destroyHls();
+  hideError();
 
   noSignal.style.display = 'none';
   video.style.display = 'block';
@@ -1017,43 +1035,41 @@ function playChannel(idx) {
   const url = ch.url;
   const looksHls = isHlsUrl(url);
 
-  if (looksHls && Hls.isSupported()) {
+  if (video.canPlayType('application/vnd.apple.mpegurl')) {
+    // Safari / iOS — HLS nativo (sempre preferir no iOS)
+    video.src = url;
+    video.load();
+    video.play().catch(e => showError('Play bloqueado', e.message, url));
+    if (statusEl) { statusEl.textContent = '🟢 HLS · nativo'; statusEl.style.color = 'var(--live)'; }
+  } else if (Hls.isSupported()) {
+    // Chrome / Firefox — hls.js
     hlsInstance = new Hls({ enableWorker: true, lowLatencyMode: true, backBufferLength: 30 });
     hlsInstance.loadSource(url);
     hlsInstance.attachMedia(video);
     hlsInstance.on(Hls.Events.MANIFEST_PARSED, () => {
-      video.play().catch(e => {
-        if (statusEl) { statusEl.textContent = '🔴 Play bloqueado: ' + e.message; statusEl.style.color = 'var(--accent2)'; }
-      });
-      if (statusEl) { statusEl.textContent = '🟢 HLS · hls.js'; statusEl.style.color = 'var(--live)'; }
+      video.play().catch(e => showError('Play bloqueado', e.message, url));
     });
     hlsInstance.on(Hls.Events.ERROR, (event, data) => {
       if (data.fatal) {
-        if (statusEl) { statusEl.textContent = `🔴 HLS erro: ${data.type} / ${data.details}`; statusEl.style.color = 'var(--accent2)'; }
+        showError('Erro HLS', `${data.type} / ${data.details}`, url);
         destroyHls();
       }
     });
-  } else if (looksHls && video.canPlayType('application/vnd.apple.mpegurl')) {
-    video.src = url;
-    video.load();
-    video.play().catch(e => {
-      if (statusEl) { statusEl.textContent = '🔴 ' + e.message; statusEl.style.color = 'var(--accent2)'; }
-    });
-    if (statusEl) { statusEl.textContent = '🟢 HLS · nativo'; statusEl.style.color = 'var(--live)'; }
+    if (statusEl) { statusEl.textContent = '🟢 HLS · hls.js'; statusEl.style.color = 'var(--live)'; }
   } else {
+    // Fallback direto (MP4, MPEG-TS, etc)
     video.src = url;
     video.load();
-    video.play().catch(e => {
-      if (statusEl) { statusEl.textContent = '🔴 ' + e.message; statusEl.style.color = 'var(--accent2)'; }
-    });
+    video.play().catch(e => showError('Play bloqueado', e.message, url));
     if (statusEl) { statusEl.textContent = '🟢 Direto'; statusEl.style.color = 'var(--live)'; }
   }
 
   video.onerror = () => {
     const codes = ['', 'ABORTED', 'NETWORK', 'DECODE', 'SRC_NOT_SUPPORTED'];
-    const code = video.error ? (codes[video.error.code] || video.error.code) : '?';
-    const msg = video.error ? video.error.message : '';
-    if (statusEl) { statusEl.textContent = `🔴 Erro: ${code} ${msg}`; statusEl.style.color = 'var(--accent2)'; }
+    const code = video.error ? (codes[video.error.code] || String(video.error.code)) : '?';
+    const msg = video.error ? video.error.message : 'Erro desconhecido';
+    showError(`Erro de mídia: ${code}`, msg, url);
+    if (statusEl) { statusEl.textContent = `🔴 ${code}`; statusEl.style.color = 'var(--accent2)'; }
   };
 
   document.getElementById('nowTitle').textContent = ch.name;
