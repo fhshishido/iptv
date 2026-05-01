@@ -403,7 +403,7 @@ border-bottom: 1px solid var(–border);
 <!-- HEADER -->
 
 <header>
-  <div class="logo">IPTV<span>●</span>PLAY</div>
+  <div class="logo">IPTV<span>●</span>PLAY <span style="font-size:0.55rem;color:var(--muted);font-weight:400;letter-spacing:1px;vertical-align:middle;">v1.4</span></div>
   <div class="controls">
     <button class="btn primary" onclick="openModal('import')">📂 Importar M3U</button>
     <button class="btn" onclick="openModal('addChannel')">➕ Canal Manual</button>
@@ -484,7 +484,15 @@ border-bottom: 1px solid var(–border);
     </div>
     <div class="modal-actions">
       <button class="btn" onclick="closeModal('import')">Cancelar</button>
-      <button class="btn primary" onclick="importM3U()">Importar</button>
+      <button class="btn primary" id="btnImport" onclick="importM3U()">Importar</button>
+    </div>
+    <!-- PROGRESS PANEL -->
+    <div id="importProgress" style="display:none;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius);padding:12px 14px;font-family:'Space Mono',monospace;font-size:0.7rem;line-height:1.8;">
+      <div id="importLog" style="color:var(--muted);max-height:120px;overflow-y:auto;"></div>
+      <div style="margin-top:8px;background:var(--surface2);border-radius:4px;height:6px;overflow:hidden;">
+        <div id="importBar" style="height:100%;width:0%;background:var(--accent);transition:width .3s;border-radius:4px;"></div>
+      </div>
+      <div id="importBytes" style="margin-top:4px;color:var(--muted);font-size:0.65rem;"></div>
     </div>
   </div>
 </div>
