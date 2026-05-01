@@ -545,6 +545,8 @@ let favorites = new Set(JSON.parse(localStorage.getItem('iptv_favs') || '[]'));
 let activeIndex = -1;
 let currentTab = 'all';
 let currentCategory = 'Todos';
+const PAGE_SIZE = 80;
+let currentPage = 1;
 
 // ═══════════════════════════════════════
 //  MODAL
