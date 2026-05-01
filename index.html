@@ -403,7 +403,7 @@ border-bottom: 1px solid var(–border);
 <!-- HEADER -->
 
 <header>
-  <div class="logo">IPTV<span>●</span>PLAY <span style="font-size:0.55rem;color:var(--muted);font-weight:400;letter-spacing:1px;vertical-align:middle;">v2.2</span></div>
+  <div class="logo">IPTV<span>●</span>PLAY <span style="font-size:0.55rem;color:var(--muted);font-weight:400;letter-spacing:1px;vertical-align:middle;">v2.3</span></div>
   <div class="controls">
     <button class="btn primary" onclick="openModal('import')">📂 Importar M3U</button>
     <button class="btn" onclick="openModal('addChannel')">➕ Canal Manual</button>
@@ -1018,40 +1018,42 @@ function playChannel(idx) {
   const looksHls = isHlsUrl(url);
 
   if (looksHls && Hls.isSupported()) {
-    // Chrome/Firefox: use hls.js
-    hlsInstance = new Hls({
-      enableWorker: true,
-      lowLatencyMode: true,
-      backBufferLength: 30,
-    });
+    hlsInstance = new Hls({ enableWorker: true, lowLatencyMode: true, backBufferLength: 30 });
     hlsInstance.loadSource(url);
     hlsInstance.attachMedia(video);
     hlsInstance.on(Hls.Events.MANIFEST_PARSED, () => {
-      video.play().catch(() => {});
+      video.play().catch(e => {
+        if (statusEl) { statusEl.textContent = '🔴 Play bloqueado: ' + e.message; statusEl.style.color = 'var(--accent2)'; }
+      });
       if (statusEl) { statusEl.textContent = '🟢 HLS · hls.js'; statusEl.style.color = 'var(--live)'; }
     });
     hlsInstance.on(Hls.Events.ERROR, (event, data) => {
       if (data.fatal) {
-        if (statusEl) { statusEl.textContent = '🔴 Erro no stream'; statusEl.style.color = 'var(--accent2)'; }
+        if (statusEl) { statusEl.textContent = `🔴 HLS erro: ${data.type} / ${data.details}`; statusEl.style.color = 'var(--accent2)'; }
         destroyHls();
       }
     });
   } else if (looksHls && video.canPlayType('application/vnd.apple.mpegurl')) {
-    // Safari: native HLS
     video.src = url;
     video.load();
-    video.play().catch(() => {});
+    video.play().catch(e => {
+      if (statusEl) { statusEl.textContent = '🔴 ' + e.message; statusEl.style.color = 'var(--accent2)'; }
+    });
     if (statusEl) { statusEl.textContent = '🟢 HLS · nativo'; statusEl.style.color = 'var(--live)'; }
   } else {
-    // MP4, MPEG-TS, etc — direct
     video.src = url;
     video.load();
-    video.play().catch(() => {});
+    video.play().catch(e => {
+      if (statusEl) { statusEl.textContent = '🔴 ' + e.message; statusEl.style.color = 'var(--accent2)'; }
+    });
     if (statusEl) { statusEl.textContent = '🟢 Direto'; statusEl.style.color = 'var(--live)'; }
   }
 
   video.onerror = () => {
-    if (statusEl) { statusEl.textContent = '🔴 Falha ao reproduzir'; statusEl.style.color = 'var(--accent2)'; }
+    const codes = ['', 'ABORTED', 'NETWORK', 'DECODE', 'SRC_NOT_SUPPORTED'];
+    const code = video.error ? (codes[video.error.code] || video.error.code) : '?';
+    const msg = video.error ? video.error.message : '';
+    if (statusEl) { statusEl.textContent = `🔴 Erro: ${code} ${msg}`; statusEl.style.color = 'var(--accent2)'; }
   };
 
   document.getElementById('nowTitle').textContent = ch.name;
