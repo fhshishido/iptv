@@ -403,7 +403,7 @@ border-bottom: 1px solid var(–border);
 <!-- HEADER -->
 
 <header>
-  <div class="logo">IPTV<span>●</span>PLAY <span style="font-size:0.55rem;color:var(--muted);font-weight:400;letter-spacing:1px;vertical-align:middle;">v1.4</span></div>
+  <div class="logo">IPTV<span>●</span>PLAY <span style="font-size:0.55rem;color:var(--muted);font-weight:400;letter-spacing:1px;vertical-align:middle;">v1.5</span></div>
   <div class="controls">
     <button class="btn primary" onclick="openModal('import')">📂 Importar M3U</button>
     <button class="btn" onclick="openModal('addChannel')">➕ Canal Manual</button>
@@ -590,56 +590,138 @@ function parseM3U(text) {
 }
 
 // ═══════════════════════════════════════
-//  IMPORT
+//  IMPORT with progress
 // ═══════════════════════════════════════
+function logImport(msg, color='var(--muted)') {
+  const el = document.getElementById('importLog');
+  if (!el) return;
+  const line = document.createElement('div');
+  line.style.color = color;
+  line.textContent = msg;
+  el.appendChild(line);
+  el.scrollTop = el.scrollHeight;
+}
+
+function setBar(pct) {
+  const b = document.getElementById('importBar');
+  if (b) b.style.width = pct + '%';
+}
+
+function setBytes(txt) {
+  const b = document.getElementById('importBytes');
+  if (b) b.textContent = txt;
+}
+
+function showProgress(show) {
+  const p = document.getElementById('importProgress');
+  if (p) p.style.display = show ? 'block' : 'none';
+  if (show) {
+    document.getElementById('importLog').innerHTML = '';
+    setBar(0);
+    setBytes('');
+  }
+}
+
+function formatBytes(n) {
+  if (n < 1024) return n + ' B';
+  if (n < 1048576) return (n/1024).toFixed(1) + ' KB';
+  return (n/1048576).toFixed(2) + ' MB';
+}
+
+async function fetchSimple(url) {
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), 15000);
+  try {
+    const resp = await fetch(url, { signal: ctrl.signal });
+    clearTimeout(timer);
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+    const text = await resp.text();
+    return text;
+  } catch(e) {
+    clearTimeout(timer);
+    throw e;
+  }
+}
+
 async function importM3U() {
   const urlVal = document.getElementById('m3uUrl').value.trim();
   const textVal = document.getElementById('m3uText').value.trim();
   let parsed = [];
 
   if (urlVal) {
+    showProgress(true);
+    const btn = document.getElementById('btnImport');
+    btn.disabled = true;
+    btn.textContent = '⏳ Aguarde...';
+
     const proxies = [
-      u => u,
-      u => `https://corsproxy.io/?${encodeURIComponent(u)}`,
-      u => `https://api.allorigins.win/raw?url=${encodeURIComponent(u)}`,
-      u => `https://proxy.cors.sh/${u}`,
+      { label: 'direto',          fn: u => u },
+      { label: 'corsproxy.io',    fn: u => `https://corsproxy.io/?${encodeURIComponent(u)}` },
+      { label: 'allorigins.win',  fn: u => `https://api.allorigins.win/raw?url=${encodeURIComponent(u)}` },
+      { label: 'proxy.cors.sh',   fn: u => `https://proxy.cors.sh/${u}` },
     ];
+
     let success = false;
-    for (const proxyFn of proxies) {
+    for (let i = 0; i < proxies.length; i++) {
+      const { label, fn } = proxies[i];
+      logImport(`[${i+1}/${proxies.length}] Tentando via ${label}...`);
+      setBar(10 + i * 20);
       try {
-        const target = proxyFn(urlVal);
-        const label = target === urlVal ? 'direto' : 'proxy';
-        toast(`⏳ Tentando ${label}...`, 'var(--accent)');
-        const resp = await fetch(target, { signal: AbortSignal.timeout(8000) });
-        if (!resp.ok) continue;
-        const text = await resp.text();
-        if (!text.includes('#EXTM3U') && !text.includes('#EXTINF')) continue;
+        const target = fn(urlVal);
+        const text = await fetchSimple(target);
+        if (!text || (!text.includes('#EXTM3U') && !text.includes('#EXTINF'))) {
+          logImport(`  ✗ Resposta invalida (nao e M3U)`, 'var(--accent2)');
+          continue;
+        }
+        logImport(`  ✓ Download OK — ${formatBytes(text.length)}`, 'var(--live)');
+        setBar(90);
         parsed = parseM3U(text);
+        logImport(`  ✓ ${parsed.length} canais encontrados`, 'var(--live)');
+        setBar(100);
+        setBytes(formatBytes(text.length) + ' recebidos');
         success = true;
         break;
-      } catch(e) { continue; }
+      } catch(e) {
+        logImport(`  ✗ Falhou: ${e.message}`, 'var(--accent2)');
+      }
     }
+
+    btn.disabled = false;
+    btn.textContent = 'Importar';
+
     if (!success) {
-      toast('Nao foi possivel baixar. Cole o conteudo M3U manualmente.', 'var(--accent2)');
+      logImport('Todos os metodos falharam. Cole o conteudo M3U manualmente.', 'var(--accent2)');
+      setBar(0);
       return;
     }
+
   } else if (textVal) {
+    showProgress(true);
+    logImport('Processando conteudo colado...');
     parsed = parseM3U(textVal);
+    logImport(`✓ ${parsed.length} canais encontrados`, 'var(--live)');
+    setBar(100);
   } else {
-    toast('Informe uma URL ou cole o conteúdo M3U.', 'var(--accent2)');
+    toast('Informe uma URL ou cole o conteudo M3U.', 'var(--accent2)');
     return;
   }
 
-  if (!parsed.length) { toast('Nenhum canal encontrado.', 'var(--accent2)'); return; }
+  if (!parsed.length) {
+    logImport('Nenhum canal encontrado no conteudo.', 'var(--accent2)');
+    return;
+  }
 
   channels = [...channels, ...parsed];
   save();
   renderChannels();
   renderCategories();
-  closeModal('import');
   document.getElementById('m3uUrl').value = '';
   document.getElementById('m3uText').value = '';
-  toast(`✅ ${parsed.length} canais importados!`);
+  setTimeout(() => {
+    closeModal('import');
+    showProgress(false);
+    toast(`✅ ${parsed.length} canais importados!`);
+  }, 1000);
 }
 
 // ═══════════════════════════════════════
@@ -919,6 +1001,15 @@ document.addEventListener('keydown', e => {
 // ═══════════════════════════════════════
 //  INIT
 // ═══════════════════════════════════════
+// Restaura última URL digitada
+const savedUrl = localStorage.getItem('iptv_last_url');
+if (savedUrl) document.getElementById('m3uUrl').value = savedUrl;
+
+// Salva URL ao digitar
+document.getElementById('m3uUrl').addEventListener('input', function() {
+  localStorage.setItem('iptv_last_url', this.value.trim());
+});
+
 renderCategories();
 renderChannels();
 </script>
