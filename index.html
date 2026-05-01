@@ -403,7 +403,7 @@ border-bottom: 1px solid var(–border);
 <!-- HEADER -->
 
 <header>
-  <div class="logo">IPTV<span>●</span>PLAY <span style="font-size:0.55rem;color:var(--muted);font-weight:400;letter-spacing:1px;vertical-align:middle;">v2.6</span></div>
+  <div class="logo">IPTV<span>●</span>PLAY <span style="font-size:0.55rem;color:var(--muted);font-weight:400;letter-spacing:1px;vertical-align:middle;">v2.7</span></div>
   <div class="controls">
     <button class="btn primary" onclick="openModal('import')">📂 Importar M3U</button>
     <button class="btn" onclick="openModal('addChannel')">➕ Canal Manual</button>
@@ -411,6 +411,7 @@ border-bottom: 1px solid var(–border);
     <button class="btn danger" onclick="clearAll()">🗑 Limpar Tudo</button>
   </div>
 </header>
+<div id="globalError" style="display:none;background:#ff4f6d;color:#fff;font-family:'Space Mono',monospace;font-size:0.72rem;padding:8px 16px;z-index:999;"></div>
 
 <!-- MAIN -->
 
@@ -544,6 +545,15 @@ border-bottom: 1px solid var(–border);
 <div id="toast"></div>
 
 <script>
+// ═══════════════════════════════════════
+//  GLOBAL ERROR HANDLER
+// ═══════════════════════════════════════
+window.onerror = function(msg, src, line, col, err) {
+  const el = document.getElementById('globalError');
+  if (el) { el.textContent = `ERRO JS [${line}:${col}]: ${msg}`; el.style.display = 'block'; }
+  return false;
+};
+
 // ═══════════════════════════════════════
 //  STATE
 // ═══════════════════════════════════════
